@@ -89,3 +89,99 @@ plot(pressure)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE,
+ fig.align = "center")
+# message = F,
+# warning = F)
+
+# Loading in the needed packages
+pacman::p_load(tidyverse, lubridate)
+
+# Changing default themes
+theme_set(theme_bw())
+theme_update(plot.title = element_text(hjust = 0.5),
+ plot.subtitle = element_text(hjust = 0.5))
+
+# Changing the default choice for how many decimal places are displayed
+options(digits = 4)
+```
+
+## Introduction
+
+## Getting the data
+
+```{r}
+# Loads in the data
+hurricanes <- read.csv("storms.csv")
+
+hurricanes_clean <- 
+  hurricanes |> 
+  mutate(
+    date = make_datetime(year, month, day, hour)
+  ) |> 
+  select(-X, -year, -month, -day, -hour) |> 
+  mutate(
+    year = year(date),
+    month = month(date, label = T, abbr = F),
+    day = day(date),
+    hour = hour(date)
+  )
+    ```
+    
+## Number of Storms per Year chart
+
+```{r}
+hurricanes_clean |> 
+  summarize(count = n(),
+            .by = year) |> 
+
+ggplot(mapping = aes(
+  x = year,
+  y = count
+)) + 
+  geom_col(fill = "steelblue",
+           color = "black") + 
+  labs(title = "Number of Storms per Year",
+       x = "Year",
+       y = "Number of Storms")
+```
+
+```{r}
+# Bar plot of storms by month
+ggplot(data = hurricanes_clean, 
+       mapping = aes(
+         x = factor(month(date), levels = 1:12)
+       )
+) +
+  geom_bar(
+    fill = "steelblue",
+    color = "black"
+  ) +
+  
+  labs(title = "Monthly Distribution of Storms", 
+       x = "Month",
+       y = "Count")
+```
+
+```{r}
+
+```
+
+
+```{r}
+hurricanes_clean |> 
+  dplyr::select(where(is.numeric), -hour, -day, -year) |> 
+  GGally::ggcorr(
+    low = "red3",
+    mid = "white",
+    high = "steelblue",
+    label = T,
+    label_round = 2
+  )
+```
+
