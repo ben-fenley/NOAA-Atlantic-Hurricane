@@ -1,0 +1,226 @@
+---
+title: "Final Project"
+author: "Andrew & Ben"
+output: html_document
+date: "2024-11-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+ fig.align = "center")
+ #message = F,
+ #warning = F)
+
+# Loading in the needed packages
+pacman::p_load(tidyverse, skimr, GGally, regclass, broom)
+
+# Changing default themes
+theme_set(theme_bw())
+theme_update(plot.title = element_text(hjust = 0.5),
+ plot.subtitle = element_text(hjust = 0.5))
+
+# Changing the default choice for how many decimal places are displayed
+options(digits = 4)
+```
+
+# Introduction
+Airbnb is a popular company that connects people looking for accommodations with hosts who offer lodging options. The company was founded in 2008 and allows hosts to list their own properties, which can range from a single room to an entire house) for short-term rentals. Even though Airbnb has fares that it sets, most of the price comes down to what the host want to set the price at. This inspired us to look at some of the factors of Airbnb properties which may affect the price of the listing. More information on the additional types of feed that Airbnb charges can be found at: <https://www.airbnb.com/help/article/125>. The data was retrieved from Kaggle user Oscar Batiz the link is the following: <https://www.kaggle.com/datasets/oscarbatiz/los-angeles-airbnb-listings>.
+
+## Getting the data
+The code chunk below will load the data of Airbnb listings ranging as of 04 of September 2024. We'll start by cleaning the data and removing any columns that do not have information. 
+```{r}
+listings <- read.csv("listings.csv")
+
+listings_clean <- 
+  listings |> 
+  dplyr::select(price, host_is_superhost, neighbourhood_group_cleansed,
+                room_type:beds) |> 
+  mutate(
+    host_is_superhost = case_when(
+      host_is_superhost == "t" ~ 1,
+      host_is_superhost == "f" ~ 0,
+      TRUE ~ NA),
+    neighbourhood_group_cleansed = if_else(
+      neighbourhood_group_cleansed == "City of Los Angeles", 1, 0),
+    room_type = if_else(
+      room_type == "Entire home/apt", 1, 0
+    )
+  ) |> 
+  drop_na() #|> 
+  #filter(price < 250)
+
+str(listings_clean)
+```
+
+The variables we are going to use are: 
+
+
+                    room_type    count_rooms
+1          City of Los Angeles       22447
+2                 Other Cities       18773
+3         Unincorporated Areas        4313
+
+        room_type count_rooms
+1 Entire home/apt       33612
+2    Private room       10886
+3     Shared room         747
+4      Hotel room         288
+
+## Lets have a look at multicollinearity
+```{r}
+
+listings_clean |> 
+  dplyr::select(where(is.numeric)) |> 
+  ggcorr(
+    low = "tomato",
+    mid = "white",
+    high = "steelblue",
+    label = T,
+    label_round = 2,
+    angle = -45,
+    hjust = 1
+  )
+
+```
+Potential multicollinearity
+
+
+```{r}
+ggplot(data = listings_clean, 
+       mapping = aes(x = price)) +
+  
+  geom_histogram(binwidth = 20, 
+                 fill = "steelblue", 
+                 color = "black") +
+  
+  #scale_x_continuous(limits = c(0, 250)) + # To limit the impact of outliers
+  
+  labs(title = "Distribution of Airbnb Prices",
+       x = "Price", 
+       y = "Frequency")
+
+```
+
+```{r}
+ggplot(data = listings_clean,
+       mapping = aes(x = as.factor(room_type), y = price)) +
+  
+  geom_boxplot(fill = "steelblue") +
+  
+  scale_y_continuous(limits = c(0, 250)) + # To limit the impact of outliers
+    
+  labs(title = "Airbnb Prices by Room Type",
+       x = "Room Type", 
+       y = "Price")
+
+```
+
+```{r}
+listings_clean |> 
+  pivot_longer(
+    cols = c(accommodates, bathrooms, bedrooms, beds), 
+    names_to = "variable",
+    values_to = "values"
+  ) |> 
+  
+  ggplot(mapping = aes(
+  x = values, 
+  y = price)) +
+
+  labs(x = NULL, 
+       y = NULL) +
+  
+  geom_point() +
+  
+  # Changes y labels to currency
+  scale_y_continuous(label = scales::label_currency()) +
+  
+    # Creates separate graph for each of the numeric variables
+  facet_wrap(
+    facets = ~variable,
+    scales = "free_x"
+  )
+  
+  geom_smooth(
+    method = "loess",
+    formula = y~x,
+    se = F
+  ) 
+  
+  
+
+```
+
+```{r}
+  ggplot(
+    data = listings_clean,
+    mapping = aes(
+      x = accommodates, 
+      y = price)) +
+
+  geom_point() +
+  
+    geom_smooth(
+    method = "loess",
+    formula = y~x,
+    se = F
+  ) +
+  
+  # Changes y labels to currency
+  scale_y_continuous(label = scales::label_currency())
+```
+
+```{r}
+price_lm1 <- lm(
+  formula = price ~ accommodates, 
+  data = listings_clean
+)
+
+price_lm2 <- lm(
+  formula = price ~ accommodates + room_type,
+  data = listings_clean
+)
+
+price_lm3 <- lm(
+  formula = price ~ accommodates + room_type + bathrooms,
+  data = listings_clean
+)
+
+```
+
+```{r}
+bind_rows(
+  .id = "model",
+  "price_lm1" = glance(price_lm1),
+  "price_lm2" = glance(price_lm2),
+  "price_lm3" = glance(price_lm3)
+) |> 
+  dplyr::select(model, n_predictors = df, r.squared, sigma) |> 
+  mutate(r.squared = round(r.squared, 3),
+         sigma = round(sigma, 0)) |> 
+  gt::gt()
+
+
+```
+
+```{r}
+listings_ratings <- 
+  listings |> 
+  dplyr::select(id, host_since:host_is_superhost, price, number_of_reviews:review_scores_rating)
+  
+  
+  
+  
+  listings_ratings |> 
+  dplyr::select(where(is.numeric)) |> 
+  ggcorr(
+    low = "tomato",
+    mid = "white",
+    high = "steelblue",
+    label = T,
+    label_round = 2,
+    angle = -45,
+    hjust = 1
+  )
+  
+```
