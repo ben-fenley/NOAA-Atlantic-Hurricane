@@ -24,7 +24,7 @@ options(digits = 4)
 ```
 
 # Introduction
-Airbnb is a popular company that connects people looking for accommodations with hosts who offer lodging options. The company was founded in 2008 and allows hosts to list their own properties, which can range from a single room to an entire house) for short-term rentals. Even though Airbnb has fares that it sets, most of the price comes down to what the host want to set the price at. This inspired us to look at some of the factors of Airbnb properties which may affect the price of the listing. More information on the additional types of feed that Airbnb charges can be found at: <https://www.airbnb.com/help/article/125>. The data was retrieved from Kaggle user Oscar Batiz the link is the following: <https://www.kaggle.com/datasets/oscarbatiz/los-angeles-airbnb-listings>.
+Airbnb is a popular company that connects people looking for accommodations with hosts who offer lodging options. The company was founded in 2008 and allows hosts to list their own properties, which can range from a single room to an entire house) for short-term rentals. Even though Airbnb has fares that it sets, most of the price comes down to what the host want to set the price at. This inspired us to determine if the number of people that can be accomodated in an Airbnb properties affects the price of the listing. If it does not, are there any other variables that affect the price more than how many people it can accomodate. More information on the additional types of feed that Airbnb charges can be found at: <https://www.airbnb.com/help/article/125>. The data was retrieved from Kaggle user Oscar Batiz the link is the following: <https://www.kaggle.com/datasets/oscarbatiz/los-angeles-airbnb-listings>.
 
 ## Getting the data
 The code chunk below will load the data of Airbnb listings ranging as of 04 of September 2024. We'll start by cleaning the data and removing any columns that do not have information. 
@@ -36,40 +36,108 @@ listings_clean <-
   dplyr::select(price, host_is_superhost, neighbourhood_group_cleansed,
                 room_type:beds) |> 
   mutate(
-    host_is_superhost = case_when(
+    superhost = case_when(
       host_is_superhost == "t" ~ 1,
       host_is_superhost == "f" ~ 0,
       TRUE ~ NA),
-    neighbourhood_group_cleansed = if_else(
+    in_LA = if_else(
       neighbourhood_group_cleansed == "City of Los Angeles", 1, 0),
     room_type = if_else(
-      room_type == "Entire home/apt", 1, 0
+      room_type == "Entire home/apt" | room_type == "Hotel Room", 1, 0
     )
   ) |> 
-  drop_na() #|> 
-  #filter(price < 250)
+  dplyr::select(-neighbourhood_group_cleansed, -host_is_superhost) |> 
+  filter(
+    !is.na(price)
+  )
 
 str(listings_clean)
 ```
+```{r}
+# Removes the listings data set since it is large and not used again
+#rm(listings)
+```
 
 The variables we are going to use are: 
+1. **price**: the price of the AirBnb
+2. **superhost**: If the owner of the AirBnb is a superhost. Airbnb lists a superhost as "a host who goes above and beyond to provide excellent hospitality".
+3. **room_type**: Is a dummy variable. A "1" is used to indicate that the listing is a "Entire home/apt" or a "Hotel room" and a "0" is used to indicate that the listing is a "Private room" or "Shared room".
+4. **accommodates**: Is the number of people that the listing can accommodate.
+5. **bathrooms**: Is the number of bathrooms the listings has. 
+6. **bedrooms**: Is the number of bedrooms the listing has.
+7. **beds**: Is the number of beds the listing has.
+8. **in_LA**: Is a dummy variable. A "1" is used to indicate that the listing is within LA and a "0" to describe that it is outside of LA or unincorporated areas.
 
 
-                    room_type    count_rooms
-1          City of Los Angeles       22447
-2                 Other Cities       18773
-3         Unincorporated Areas        4313
-
-        room_type count_rooms
-1 Entire home/apt       33612
-2    Private room       10886
-3     Shared room         747
-4      Hotel room         288
-
-## Lets have a look at multicollinearity
+## Lets have a look at a summary of the variables
 ```{r}
+summary(listings_clean$price)
+```
 
-listings_clean |> 
+There seems to be some outliers in this data, particularly with the maximum value of 56,425, which is much higher than the third quartile of 260. This is causing the mean (289) to be notably higher than the median (155) indicating a skewed distribution.
+
+## Lets try to fix this by removing some outliers
+```{r}
+# Calculate the 5th and 95th percentiles for the price variable
+lower_5th <- quantile(listings_clean$price, 0.05, na.rm = TRUE)
+upper_95th <- quantile(listings_clean$price, 0.95, na.rm = TRUE)
+
+# Filters the dataset to keep only the prices within the 5th and 95th percentiles
+listings_clean2 <- 
+  listings_clean |> 
+  filter(price >= lower_5th & price <= upper_95th)
+
+# Checks the summary of the new dataset without extreme outliers
+summary(listings_clean2$price)
+```
+
+Looking at our data now, there seems to be fewer outliers now since we have taken out the top 95th and bottom 5th percentiles to get rid of extreme cases. Our median is now closer to our mean and our max and min are not as far away from our mean as well.
+
+## Lets have a look at our graph
+```{r}
+ggplot(data = listings_clean2, 
+       mapping = aes(x = price)) +
+  
+  geom_histogram(binwidth = 20, 
+                 fill = "steelblue", 
+                 color = "black") +
+  
+  labs(title = "Distribution of Airbnb Prices",
+       x = "Price", 
+       y = "Frequency") + 
+  
+  scale_x_continuous(label = scales::label_currency())
+
+```
+
+Looking at our histogram there still seems to be a noticeble right-skew, with a concentration of values between approximately 60 and 300. This suggests, that while most listings are priced lower, a few high-priced outliers are influencing the ditribution, by pulling the mean upwards. 
+
+## Lets explore 
+```{r}
+ggplot(data = listings_clean2,
+       mapping = aes(
+         x = as.factor(room_type), 
+         y = price
+       )
+) +
+  
+  geom_boxplot(fill = "steelblue") +
+    
+  labs(
+    title = "Airbnb Prices by Room Type",
+    x = "Room Type", 
+    y = "Price"
+  ) + 
+  
+  scale_y_continuous(label = scales::label_currency())
+
+```
+Looking at the Airbnb room type boxplots the presence of outliers in the higher range for entire homes indicates while most of the listings in this category are within are certain price range, there seems to be a few luxury listings contributing significantly to inflating the overall price average. The median listing for "Entire home/apt" or "Hotel rooms" seems to be higher than "Private rooms" or "Shared rooms". Additionally, the distribution of price for entire homes/apt or hotel rooms seems to be much higher than for private or shared rooms. 
+
+## Before making our model lets have a look at multicollinearity
+```{r}
+listings_clean2 |> 
+  drop_na() |> 
   dplyr::select(where(is.numeric)) |> 
   ggcorr(
     low = "tomato",
@@ -82,51 +150,46 @@ listings_clean |>
   )
 
 ```
-Potential multicollinearity
+There seems to be some potential multicollinearity, especially among bedrooms, beds, bathrooms and accomodates. Using all these variables could potentially lead to the interpretation of our model, could also inflate the standard errors by making it difficult to assess the significance of individual predictors in the model.
 
 
+## Lets have a look at the variables with the highest association with price
 ```{r}
-ggplot(data = listings_clean, 
-       mapping = aes(x = price)) +
-  
-  geom_histogram(binwidth = 20, 
-                 fill = "steelblue", 
-                 color = "black") +
-  
-  #scale_x_continuous(limits = c(0, 250)) + # To limit the impact of outliers
-  
-  labs(title = "Distribution of Airbnb Prices",
-       x = "Price", 
-       y = "Frequency")
-
+summary(listings_clean2$accommodates)
+summary(listings_clean2$bedrooms)
 ```
-
+The maximum value of 50 is significantly larger than the rest of the data, with the median of 1 and the third quartile of 2. This extreme value of 50 suggests the presence of an outlier in the data. 
 ```{r}
-ggplot(data = listings_clean,
-       mapping = aes(x = as.factor(room_type), y = price)) +
-  
-  geom_boxplot(fill = "steelblue") +
-  
-  scale_y_continuous(limits = c(0, 250)) + # To limit the impact of outliers
-    
-  labs(title = "Airbnb Prices by Room Type",
-       x = "Room Type", 
-       y = "Price")
+# Calculate the 1st and 99th percentiles for the bedrooms variable
+lower_percentile <- quantile(listings_clean2$bedrooms, 0.01, na.rm = TRUE)
+upper_99th <- quantile(listings_clean2$bedrooms, 0.99, na.rm = TRUE)
 
+# Filter the dataset to keep only the listings within the percentiles
+listings_clean3 <- listings_clean2 |> 
+  filter(bedrooms >= lower_percentile & bedrooms <= upper_99th)
+
+# Check the summary of the new dataset without extreme outliers
+summary(listings_clean3$bedrooms)
 ```
+Now the furthest percentile outliers have been removed. 
 
+
+## Further look at bedrooms and accommodates
+Both bedrooms and accommodates both have a high association with price. Lets have a futher look at these predictors. 
 ```{r}
-listings_clean |> 
+listings_clean3 |> 
+  filter(!is.na(accommodates) & !is.na(bedrooms)) |> 
   pivot_longer(
-    cols = c(accommodates, bathrooms, bedrooms, beds), 
+    cols = c(accommodates, bedrooms), 
     names_to = "variable",
     values_to = "values"
   ) |> 
   
-  ggplot(mapping = aes(
-  x = values, 
-  y = price)) +
-
+  ggplot(
+    mapping = aes(
+      x = values, 
+      y = price)) +
+  
   labs(x = NULL, 
        y = NULL) +
   
@@ -139,54 +202,37 @@ listings_clean |>
   facet_wrap(
     facets = ~variable,
     scales = "free_x"
-  )
+  )  +
   
   geom_smooth(
-    method = "loess",
+    method = "lm",
     formula = y~x,
     se = F
   ) 
-  
-  
-
 ```
 
-```{r}
-  ggplot(
-    data = listings_clean,
-    mapping = aes(
-      x = accommodates, 
-      y = price)) +
 
-  geom_point() +
-  
-    geom_smooth(
-    method = "loess",
-    formula = y~x,
-    se = F
-  ) +
-  
-  # Changes y labels to currency
-  scale_y_continuous(label = scales::label_currency())
-```
 
+## Lets make some linear models
 ```{r}
+
 price_lm1 <- lm(
   formula = price ~ accommodates, 
-  data = listings_clean
+  data = listings_clean3 |> filter(!is.na(accommodates))
 )
 
 price_lm2 <- lm(
   formula = price ~ accommodates + room_type,
-  data = listings_clean
+  data = listings_clean3 |> filter(!is.na(accommodates) & !is.na(room_type))
 )
 
 price_lm3 <- lm(
-  formula = price ~ accommodates + room_type + bathrooms,
-  data = listings_clean
+  formula = price ~ bedrooms + room_type,
+  data = listings_clean3
 )
 
 ```
+
 
 ```{r}
 bind_rows(
@@ -200,27 +246,23 @@ bind_rows(
          sigma = round(sigma, 0)) |> 
   gt::gt()
 
-
 ```
 
+## Further look at potential multicollinearity
+Lets have a further look if these predictors will be a problem when making our model by calculating the variance inflation factor (VIF). 
 ```{r}
-listings_ratings <- 
-  listings |> 
-  dplyr::select(id, host_since:host_is_superhost, price, number_of_reviews:review_scores_rating)
-  
-  
-  
-  
-  listings_ratings |> 
-  dplyr::select(where(is.numeric)) |> 
-  ggcorr(
-    low = "tomato",
-    mid = "white",
-    high = "steelblue",
-    label = T,
-    label_round = 2,
-    angle = -45,
-    hjust = 1
-  )
-  
+regclass::VIF(price_lm2)
 ```
+
+
+
+                    room_type    count_rooms
+1          City of Los Angeles       22447
+2                 Other Cities       18773
+3         Unincorporated Areas        4313
+
+        room_type count_rooms
+1 Entire home/apt       33612
+2    Private room       10886
+3     Shared room         747
+4      Hotel room         288
