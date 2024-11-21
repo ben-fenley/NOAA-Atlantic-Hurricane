@@ -255,6 +255,59 @@ regclass::VIF(price_lm2)
 ```
 
 
+Let's normalize and standardize the explanatory variables of the data set:
+
+```{r}
+# Normalize function:
+normalize <- function(x){
+  return((x - min(x))/(max(x)-min(x)))
+}
+
+# Normalizing the data
+listings_norm <- 
+  listings |> 
+  mutate(
+    across(
+      .cols = -price,
+      .fns = normalize
+    )
+  )
+
+skim(listings_norm)
+
+
+# Standardize function:
+standardize <- function(x){
+  return((x - mean(x)) / sd(x))
+
+}
+
+
+# Standardizing the data
+listings_stan <-
+  listings |> 
+  mutate(
+    across(
+      .cols = -price, # Standardize the explanatory variables
+      .fns = standardize
+    )
+  )
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
                     room_type    count_rooms
 1          City of Los Angeles       22447
